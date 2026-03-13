@@ -66,6 +66,9 @@ export async function getClient(): Promise<QuickBooks> {
   if (!companyId) {
     companyId = await provider.getCompanyId();
   }
+  if (companyId && !/^\d+$/.test(companyId)) {
+    throw new Error(`Invalid company ID format: expected numeric string, got "${companyId}"`);
+  }
 
   // Create QuickBooks client with current tokens
   qbo = new QuickBooks(

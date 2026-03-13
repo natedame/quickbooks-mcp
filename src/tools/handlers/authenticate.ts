@@ -76,6 +76,27 @@ export async function handleAuthenticate(args: AuthenticateArgs): Promise<ToolRe
 
   // Step 2: Exchange authorization code for tokens
   if (args.authorization_code) {
+    // Validate input formats to reject obviously malformed values
+    if (!/^[a-zA-Z0-9\-_.~]+$/.test(args.authorization_code)) {
+      return {
+        content: [{
+          type: "text",
+          text: `Invalid authorization_code format. The code should contain only alphanumeric characters, hyphens, dots, underscores, and tildes.`,
+        }],
+        isError: true,
+      };
+    }
+
+    if (args.realm_id && !/^\d+$/.test(args.realm_id)) {
+      return {
+        content: [{
+          type: "text",
+          text: `Invalid realm_id format. The realm ID (company ID) should be a numeric string.`,
+        }],
+        isError: true,
+      };
+    }
+
     if (!args.realm_id) {
       return {
         content: [{

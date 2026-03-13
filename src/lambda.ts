@@ -15,10 +15,13 @@ import { getAuthConfig, validateToken } from "./auth/token-validator.js";
 // Set HTTP output mode at module load (before any handlers run)
 setOutputMode("http");
 
-// Filter out qbo_authenticate — not relevant for remote/Lambda usage
-const remoteToolDefinitions = toolDefinitions.filter(
-  (t) => t.name !== "qbo_authenticate"
-);
+// Filter out qbo_authenticate (not relevant for Lambda) and write tools when read-only
+const isReadOnly = process.env.QBO_READ_ONLY === "true";
+const remoteToolDefinitions = toolDefinitions.filter((t) => {
+  if (t.name === "qbo_authenticate") return false;
+  if (isReadOnly && /^(create_|edit_|delete_)/.test(t.name)) return false;
+  return true;
+});
 
 // Load auth config once at module level (cached across warm invocations)
 const authConfig = getAuthConfig();
@@ -75,7 +78,7 @@ interface APIGatewayResult {
 }
 
 const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": process.env.CORS_ALLOWED_ORIGIN || "*",
   "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
   "Access-Control-Allow-Headers":
     "Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version",
@@ -149,7 +152,7 @@ function extractBearerToken(headers: Record<string, string | undefined>): string
   const auth = headers["authorization"] || headers["Authorization"];
   if (!auth) return null;
   const match = auth.match(/^Bearer\s+(.+)$/i);
-  return match ? match[1] : null;
+  return match ? match[1].trim() : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +350,19 @@ export async function handler(event: APIGatewayEvent): Promise<APIGatewayResult>
   }
 
   if (method === "POST") {
+    // Fail-closed: if auth env vars are partially configured, reject requests
+    // rather than silently skipping authentication
+    if (!authConfig && (process.env.MCP_AUTH_JWKS_URI || process.env.MCP_AUTH_AUDIENCE || process.env.MCP_AUTH_ISSUER)) {
+      return {
+        statusCode: 500,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          error: "server_error",
+          error_description: "Auth configuration is incomplete — all of MCP_AUTH_JWKS_URI, MCP_AUTH_AUDIENCE, and MCP_AUTH_ISSUER must be set",
+        }),
+        isBase64Encoded: false,
+      };
+    }
     if (authConfig) {
       const token = extractBearerToken(event.headers);
       if (!token) {

@@ -44,6 +44,32 @@ export { toolDefinitions } from "./definitions.js";
 type ToolResult = { content: Array<{ type: string; text: string }>; isError?: boolean };
 type ToolHandler = (client: QuickBooks, args: Record<string, unknown>) => Promise<ToolResult>;
 
+// Sanitize error objects to prevent credential leakage in MCP responses
+const SENSITIVE_KEYS = new Set([
+  "access_token", "refresh_token", "token", "tokenSecret",
+  "client_secret", "consumerSecret", "authorization",
+]);
+
+function sanitizeErrorValue(value: unknown, depth = 0): unknown {
+  if (depth > 5 || value === null || value === undefined) return value;
+  if (typeof value === "string") return value;
+  if (typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((v) => sanitizeErrorValue(v, depth + 1));
+  const sanitized: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    sanitized[k] = SENSITIVE_KEYS.has(k) ? "[REDACTED]" : sanitizeErrorValue(v, depth + 1);
+  }
+  return sanitized;
+}
+
+function safeErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null) {
+    return JSON.stringify(sanitizeErrorValue(error), null, 2);
+  }
+  return String(error);
+}
+
 // Tool handler registry
 const toolHandlers = new Map<string, ToolHandler>();
 
@@ -112,28 +138,16 @@ export async function executeTool(
       try {
         return await executeOperation();
       } catch (retryError) {
-        // If retry also fails, return that error
-        const errorMessage = typeof retryError === 'object' && retryError !== null
-          ? JSON.stringify(retryError, null, 2)
-          : String(retryError);
+        // If retry also fails, return sanitized error
         return {
-          content: [{ type: "text", text: `Error after retry: ${errorMessage}` }],
+          content: [{ type: "text", text: `Error after retry: ${safeErrorMessage(retryError)}` }],
           isError: true,
         };
       }
     }
 
-    let errorMessage: string;
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (typeof error === 'object' && error !== null) {
-      // node-quickbooks often returns error objects with Fault property
-      errorMessage = JSON.stringify(error, null, 2);
-    } else {
-      errorMessage = String(error);
-    }
     return {
-      content: [{ type: "text", text: `Error: ${errorMessage}` }],
+      content: [{ type: "text", text: `Error: ${safeErrorMessage(error)}` }],
       isError: true,
     };
   }

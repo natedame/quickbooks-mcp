@@ -29,6 +29,21 @@ export async function handleQuery(
 
   const entity = entityMatch[1];
 
+  // Whitelist known QuickBooks entity types to prevent method name probing
+  const ALLOWED_ENTITIES = new Set([
+    "Customer", "Vendor", "Invoice", "Bill", "Account", "Item", "Department",
+    "JournalEntry", "Purchase", "Payment", "SalesReceipt", "Deposit", "Expense",
+    "Class", "TaxAgency", "Employee", "Company", "Term", "TaxCode", "TaxRate",
+    "Transfer", "CreditMemo", "Estimate", "PaymentMethod", "VendorCredit",
+    "RefundReceipt", "BillPayment", "PurchaseOrder", "TimeActivity",
+    "Budget", "CompanyInfo",
+  ]);
+  if (!ALLOWED_ENTITIES.has(entity)) {
+    throw new Error(
+      `Unsupported entity type: "${entity}". Supported: ${[...ALLOWED_ENTITIES].sort().join(", ")}`
+    );
+  }
+
   // Handle irregular plurals for finder method names
   const pluralMap: Record<string, string> = {
     'JournalEntry': 'JournalEntries',
