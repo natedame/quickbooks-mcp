@@ -84,7 +84,9 @@ export async function getClient(): Promise<QuickBooks> {
     credentials.refresh_token
   );
 
-  // Refresh the access token
+  // Try to refresh the access token — but proceed with the current token if refresh fails,
+  // since the existing access token may still be valid (e.g. just obtained via OAuth exchange)
+  let refreshed = false;
   try {
     const tokenInfo = await promisify<{
       access_token: string;
@@ -95,34 +97,40 @@ export async function getClient(): Promise<QuickBooks> {
     credentials.access_token = tokenInfo.access_token;
     credentials.refresh_token = tokenInfo.refresh_token;
     await provider.saveCredentials(credentials);
+    refreshed = true;
   } catch (refreshError) {
     // For local mode, try using intuit-oauth for refresh as a fallback
     if (isLocalMode()) {
       try {
         credentials = await refreshAccessToken(credentials);
         await provider.saveCredentials(credentials);
-      } catch (fallbackError) {
-        // If both methods fail, throw the original error
-        throw refreshError;
+        refreshed = true;
+      } catch (_fallbackError) {
+        // Both refresh methods failed — proceed with current access token.
+        // It may still be valid if recently obtained.
       }
-    } else {
+    }
+    // In AWS mode, refresh failure is fatal (no fallback)
+    if (!isLocalMode()) {
       throw refreshError;
     }
   }
 
-  // Recreate client with new tokens
-  qbo = new QuickBooks(
-    credentials.client_id,
-    credentials.client_secret,
-    credentials.access_token,
-    false,
-    companyId,
-    useSandbox,
-    false, // Debug mode off
-    null,
-    "2.0",
-    credentials.refresh_token
-  );
+  // Recreate client with (possibly refreshed) tokens
+  if (refreshed) {
+    qbo = new QuickBooks(
+      credentials.client_id,
+      credentials.client_secret,
+      credentials.access_token,
+      false,
+      companyId,
+      useSandbox,
+      false, // Debug mode off
+      null,
+      "2.0",
+      credentials.refresh_token
+    );
+  }
 
   return qbo;
 }
