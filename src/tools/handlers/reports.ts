@@ -85,3 +85,26 @@ export async function handleGetTrialBalance(
   const summary = extractReportSummary(result, "Trial Balance");
   return outputReport("trial-balance", result, summary);
 }
+
+export async function handleGetCashFlow(
+  client: QuickBooks,
+  args: {
+    start_date?: string;
+    end_date?: string;
+    summarize_by?: string;
+  }
+): Promise<{ content: Array<{ type: string; text: string }> }> {
+  const { start_date, end_date, summarize_by } = args;
+
+  const options: Record<string, string> = {};
+  if (start_date) options.start_date = start_date;
+  if (end_date) options.end_date = end_date;
+  if (summarize_by) options.summarize_column_by = summarize_by;
+
+  const result = await promisify<unknown>((cb) =>
+    client.reportCashFlow(options, cb)
+  ) as QBReport;
+
+  const summary = extractReportSummary(result, "Cash Flow");
+  return outputReport("cash-flow", result, summary);
+}

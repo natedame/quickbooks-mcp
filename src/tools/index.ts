@@ -9,6 +9,7 @@ import {
   handleGetProfitLoss,
   handleGetBalanceSheet,
   handleGetTrialBalance,
+  handleGetCashFlow,
   handleQueryAccountTransactions,
   handleAccountPeriodSummary,
   handleCreateJournalEntry,
@@ -26,6 +27,7 @@ import {
   handleCreateInvoice,
   handleGetInvoice,
   handleEditInvoice,
+  handleCreateRecurringInvoice,
   handleCreateDeposit,
   handleGetDeposit,
   handleEditDeposit,
@@ -80,6 +82,7 @@ toolHandlers.set("list_accounts", (client, args) => handleListAccounts(client, a
 toolHandlers.set("get_profit_loss", (client, args) => handleGetProfitLoss(client, args as Parameters<typeof handleGetProfitLoss>[1]));
 toolHandlers.set("get_balance_sheet", (client, args) => handleGetBalanceSheet(client, args as Parameters<typeof handleGetBalanceSheet>[1]));
 toolHandlers.set("get_trial_balance", (client, args) => handleGetTrialBalance(client, args as Parameters<typeof handleGetTrialBalance>[1]));
+toolHandlers.set("get_cash_flow", (client, args) => handleGetCashFlow(client, args as Parameters<typeof handleGetCashFlow>[1]));
 toolHandlers.set("query_account_transactions", (client, args) => handleQueryAccountTransactions(client, args as Parameters<typeof handleQueryAccountTransactions>[1]));
 toolHandlers.set("account_period_summary", (client, args) => handleAccountPeriodSummary(client, args as Parameters<typeof handleAccountPeriodSummary>[1]));
 toolHandlers.set("create_journal_entry", (client, args) => handleCreateJournalEntry(client, args as Parameters<typeof handleCreateJournalEntry>[1]));
@@ -97,6 +100,7 @@ toolHandlers.set("edit_sales_receipt", (client, args) => handleEditSalesReceipt(
 toolHandlers.set("create_invoice", (client, args) => handleCreateInvoice(client, args as Parameters<typeof handleCreateInvoice>[1]));
 toolHandlers.set("get_invoice", (client, args) => handleGetInvoice(client, args as { id: string }));
 toolHandlers.set("edit_invoice", (client, args) => handleEditInvoice(client, args as Parameters<typeof handleEditInvoice>[1]));
+toolHandlers.set("create_recurring_invoice", (client, args) => handleCreateRecurringInvoice(client, args as Parameters<typeof handleCreateRecurringInvoice>[1]));
 toolHandlers.set("create_deposit", (client, args) => handleCreateDeposit(client, args as Parameters<typeof handleCreateDeposit>[1]));
 toolHandlers.set("get_deposit", (client, args) => handleGetDeposit(client, args as { id: string }));
 toolHandlers.set("edit_deposit", (client, args) => handleEditDeposit(client, args as Parameters<typeof handleEditDeposit>[1]));

@@ -142,6 +142,28 @@ export const toolDefinitions = [
     },
   },
   {
+    name: "get_cash_flow",
+    description: "Get a Statement of Cash Flows report. Shows cash inflows and outflows from operating, investing, and financing activities.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        start_date: {
+          type: "string",
+          description: "Start date in YYYY-MM-DD format",
+        },
+        end_date: {
+          type: "string",
+          description: "End date in YYYY-MM-DD format",
+        },
+        summarize_by: {
+          type: "string",
+          description: "How to summarize columns: 'Total' (default), 'Month', 'Week', 'Days', 'Quarter', 'Year'",
+        },
+      },
+      required: [],
+    },
+  },
+  {
     name: "query_account_transactions",
     description: "Query all transactions affecting a specific account. Searches across JournalEntry, Purchase, Deposit, SalesReceipt, Bill, Invoice, and Payment. Returns consolidated list with date, type, amount (debit/credit), and description. Useful for investigating account balance discrepancies.",
     inputSchema: {
@@ -1047,6 +1069,130 @@ export const toolDefinitions = [
         },
       },
       required: ["id"],
+    },
+  },
+  {
+    name: "create_recurring_invoice",
+    description: "Create a recurring invoice template that automatically generates invoices on a schedule. Accepts customer/item/department names (will lookup IDs). Supports Daily, Weekly, Monthly, and Yearly schedules. Can be automated (auto-create), reminder-based, or unscheduled.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description: "Template name for this recurring invoice (e.g., 'Monthly Retainer - Acme Corp')",
+        },
+        recur_type: {
+          type: "string",
+          enum: ["Automated", "Reminder", "Unscheduled"],
+          description: "Type of recurring transaction: Automated (auto-creates invoices), Reminder (sends reminder to create), Unscheduled (manual creation). Default: Automated",
+        },
+        customer_name: {
+          type: "string",
+          description: "Customer display name (will be looked up to get ID)",
+        },
+        customer_id: {
+          type: "string",
+          description: "Customer ID (use if you already know it, otherwise use customer_name)",
+        },
+        department_name: {
+          type: "string",
+          description: "Department/location name (optional)",
+        },
+        memo: {
+          type: "string",
+          description: "Private memo (internal, not visible to customer)",
+        },
+        customer_memo: {
+          type: "string",
+          description: "Customer-facing message visible on the invoice",
+        },
+        bill_email: {
+          type: "string",
+          description: "Email address to send the invoice to",
+        },
+        sales_term_ref: {
+          type: "string",
+          description: "Payment terms name (e.g., 'Net 30')",
+        },
+        schedule_info: {
+          type: "object",
+          description: "Schedule configuration for when invoices are created",
+          properties: {
+            start_date: {
+              type: "string",
+              description: "Start date in YYYY-MM-DD format (required)",
+            },
+            end_date: {
+              type: "string",
+              description: "End date in YYYY-MM-DD format (optional, mutually exclusive with max_occurrences)",
+            },
+            max_occurrences: {
+              type: "number",
+              description: "Maximum number of invoices to create (optional, mutually exclusive with end_date)",
+            },
+            interval_type: {
+              type: "string",
+              enum: ["Daily", "Weekly", "Monthly", "Yearly"],
+              description: "How often to create invoices (required)",
+            },
+            num_interval: {
+              type: "number",
+              description: "Number of intervals between invoices (default: 1). E.g., 2 with Monthly = every 2 months",
+            },
+            day_of_week: {
+              type: "number",
+              description: "Day of week 1-7 (only valid for Weekly interval_type)",
+            },
+            day_of_month: {
+              type: "number",
+              description: "Day of month 1-31 (only valid for Monthly interval_type)",
+            },
+            days_before: {
+              type: "number",
+              description: "Days before schedule date to create invoice (only valid for Automated recur_type)",
+            },
+          },
+          required: ["start_date", "interval_type"],
+        },
+        lines: {
+          type: "array",
+          description: "Array of invoice line items",
+          items: {
+            type: "object",
+            properties: {
+              item_name: {
+                type: "string",
+                description: "Item (product/service) name (e.g., 'SEO', 'Consulting'). Auto-resolved to ID.",
+              },
+              item_id: {
+                type: "string",
+                description: "Item ID (use if you already know it)",
+              },
+              amount: {
+                type: "number",
+                description: "Line total amount (alternative to qty + unit_price)",
+              },
+              qty: {
+                type: "number",
+                description: "Quantity (default: 1)",
+              },
+              unit_price: {
+                type: "number",
+                description: "Price per unit",
+              },
+              description: {
+                type: "string",
+                description: "Line description",
+              },
+            },
+          },
+        },
+        draft: {
+          type: "boolean",
+          description: "If true, validate and show preview without creating (default: true)",
+        },
+      },
+      required: ["name", "schedule_info", "lines"],
     },
   },
   {

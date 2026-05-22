@@ -7,6 +7,7 @@ export {
   handleGetProfitLoss,
   handleGetBalanceSheet,
   handleGetTrialBalance,
+  handleGetCashFlow,
 } from './reports.js';
 export { handleQueryAccountTransactions } from './account-transactions.js';
 export { handleAccountPeriodSummary } from './account-period-summary.js';
@@ -19,6 +20,7 @@ export { handleCreateBill, handleGetBill, handleEditBill } from './bill.js';
 export { handleCreateExpense, handleGetExpense, handleEditExpense } from './expense.js';
 export { handleCreateSalesReceipt, handleGetSalesReceipt, handleEditSalesReceipt } from './sales-receipt.js';
 export { handleCreateInvoice, handleGetInvoice, handleEditInvoice } from './invoice.js';
+export { handleCreateRecurringInvoice } from './recurring-invoice.js';
 export { handleCreateDeposit, handleGetDeposit, handleEditDeposit } from './deposit.js';
 export { handleCreateVendorCredit, handleGetVendorCredit, handleEditVendorCredit } from './vendor-credit.js';
 export { handleCreateCustomer, handleGetCustomer, handleEditCustomer } from './customer.js';
