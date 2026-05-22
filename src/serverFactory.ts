@@ -8,8 +8,15 @@ import {
 import { toolDefinitions, executeTool } from "./tools/index.js";
 
 const isReadOnly = process.env.QBO_READ_ONLY === "true";
+const writeWhitelist = process.env.QBO_WRITE_WHITELIST
+  ? process.env.QBO_WRITE_WHITELIST.split(",").map((s) => s.trim())
+  : [];
+
 const activeToolDefinitions = isReadOnly
-  ? toolDefinitions.filter((t) => !t.name.match(/^(create_|edit_|delete_)/))
+  ? toolDefinitions.filter((t) => {
+      const isWriteTool = /^(create_|edit_|delete_)/.test(t.name);
+      return !isWriteTool || writeWhitelist.includes(t.name);
+    })
   : toolDefinitions;
 
 export function createServer(): Server {
@@ -33,7 +40,7 @@ export function createServer(): Server {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
-    if (isReadOnly && /^(create_|edit_|delete_)/.test(name)) {
+    if (isReadOnly && /^(create_|edit_|delete_)/.test(name) && !writeWhitelist.includes(name)) {
       return {
         content: [{ type: "text", text: `Tool "${name}" is disabled in read-only mode (QBO_READ_ONLY=true).` }],
         isError: true,
