@@ -112,6 +112,12 @@ Both builds must pass before committing. After changes, restart Claude Code to r
 - Use `closes #N` in commit messages to auto-close GitHub issues
 - Commit messages: short imperative subject, body explains the "why"
 
+## Production OAuth & IP Whitelisting
+
+Intuit requires an IP address during production app setup. We entered the Mac's public IP but it is **dynamic** (no static IP). If API calls start failing with auth/403 errors after a period of working fine, the likely cause is an IP change. Fix: look up the current public IP (`curl -s https://api.ipify.org`) and update it in the Intuit Developer Portal under app settings → "Where your app is hosted."
+
+Note: Intuit's IP whitelisting may only be enforced at the app-review stage, not at runtime for API calls. If we never see IP-related failures in practice, this concern can be removed.
+
 ## QuickBooks API Notes
 
 - All updates require `SyncToken` for optimistic concurrency
