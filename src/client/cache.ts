@@ -227,8 +227,27 @@ export async function resolveDepartmentId(client: QuickBooks, department: string
   return department;
 }
 
-// Resolve customer by name or ID using lazy per-entry cache
-// Unlike vendor/account caches, customers are fetched on demand (companies can have thousands)
+// Escape a value for safe interpolation into a QuickBooks query string.
+// QB query values are single-quoted; apostrophes must be backslash-escaped
+// (matches node-quickbooks' own criteriaToString quoting).
+function escapeQbValue(value: string): string {
+  return value.replace(/'/g, "\\'");
+}
+
+// Resolve customer by name or ID using lazy per-entry cache.
+// Unlike vendor/account caches, customers are fetched on demand (companies can have thousands).
+//
+// Resolution order for the single nameOrId arg:
+//   1. cache (by Id or lowercased DisplayName)
+//   2. if the arg is Id-like (all digits): exact Id match (active OR inactive — an explicit
+//      Id should resolve regardless of active status; QB otherwise filters inactive out)
+//   3. exact active DisplayName match
+//   4. partial (LIKE) active DisplayName match, first result wins
+//
+// All queries are passed as raw criteria STRINGS (not criteria-object arrays). node-quickbooks'
+// array-criteria path hardcodes "maxresults 1000", which this QB realm returns 0 rows for on a
+// filtered single-record lookup; the raw-string path (used by the query tool) avoids that and we
+// additionally cap with a small "maxresults 10" so a broad LIKE never transfers the whole list.
 export async function resolveCustomer(client: QuickBooks, nameOrId: string): Promise<{ value: string; name: string }> {
   // Check cache first (with TTL)
   const cached = customerCacheById.get(nameOrId) || customerCacheByName.get(nameOrId.toLowerCase());
@@ -236,24 +255,29 @@ export async function resolveCustomer(client: QuickBooks, nameOrId: string): Pro
     return { value: cached.Id, name: cached.DisplayName };
   }
 
-  // Query QB for this specific customer — exact DisplayName match first
-  const result = await promisify<unknown>((cb) =>
-    client.findCustomers([
-      { field: 'DisplayName', value: nameOrId, operator: '=' },
-      { field: 'Active', value: true, operator: '=' },
-    ], cb)
-  );
-  let customers = extractQueryResults<{ Id: string; DisplayName: string; Active?: boolean }>(result, 'Customer');
-
-  // If no exact match, try LIKE for partial matching
-  if (customers.length === 0) {
-    const partialResult = await promisify<unknown>((cb) =>
-      client.findCustomers([
-        { field: 'DisplayName', value: `%${nameOrId}%`, operator: 'LIKE' },
-        { field: 'Active', value: true, operator: '=' },
-      ], cb)
+  const queryCustomers = async (whereClause: string) => {
+    const result = await promisify<unknown>((cb) =>
+      client.findCustomers(`where ${whereClause} maxresults 10`, cb)
     );
-    customers = extractQueryResults<typeof customers[0]>(partialResult, 'Customer');
+    return extractQueryResults<{ Id: string; DisplayName: string; Active?: boolean }>(result, 'Customer');
+  };
+
+  let customers: Array<{ Id: string; DisplayName: string; Active?: boolean }> = [];
+
+  // Id-equality match first when the arg is Id-like (QB customer Ids are numeric strings).
+  // Active in (true, false) so an explicitly-referenced Id resolves even if the customer is inactive.
+  if (/^\d+$/.test(nameOrId)) {
+    customers = await queryCustomers(`Id = '${escapeQbValue(nameOrId)}' and Active in (true, false)`);
+  }
+
+  // Exact active DisplayName match.
+  if (customers.length === 0) {
+    customers = await queryCustomers(`DisplayName = '${escapeQbValue(nameOrId)}' and Active = true`);
+  }
+
+  // Partial (LIKE) active DisplayName match — first result wins.
+  if (customers.length === 0) {
+    customers = await queryCustomers(`DisplayName like '%${escapeQbValue(nameOrId)}%' and Active = true`);
   }
 
   if (customers.length === 0) {
