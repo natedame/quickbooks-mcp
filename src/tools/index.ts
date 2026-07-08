@@ -31,6 +31,7 @@ import {
   handleCreateDeposit,
   handleGetDeposit,
   handleEditDeposit,
+  handleCreatePayment,
   handleCreateVendorCredit,
   handleGetVendorCredit,
   handleEditVendorCredit,
@@ -102,6 +103,7 @@ toolHandlers.set("get_invoice", (client, args) => handleGetInvoice(client, args 
 toolHandlers.set("edit_invoice", (client, args) => handleEditInvoice(client, args as Parameters<typeof handleEditInvoice>[1]));
 toolHandlers.set("create_recurring_invoice", (client, args) => handleCreateRecurringInvoice(client, args as Parameters<typeof handleCreateRecurringInvoice>[1]));
 toolHandlers.set("create_deposit", (client, args) => handleCreateDeposit(client, args as Parameters<typeof handleCreateDeposit>[1]));
+toolHandlers.set("create_payment", (client, args) => handleCreatePayment(client, args as Parameters<typeof handleCreatePayment>[1]));
 toolHandlers.set("get_deposit", (client, args) => handleGetDeposit(client, args as { id: string }));
 toolHandlers.set("edit_deposit", (client, args) => handleEditDeposit(client, args as Parameters<typeof handleEditDeposit>[1]));
 toolHandlers.set("create_vendor_credit", (client, args) => handleCreateVendorCredit(client, args as Parameters<typeof handleCreateVendorCredit>[1]));

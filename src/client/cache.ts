@@ -297,3 +297,61 @@ export async function resolveCustomer(client: QuickBooks, nameOrId: string): Pro
 
   return { value: customer.Id, name: customer.DisplayName };
 }
+
+// --- Invoice lookup (for payment application) ---
+
+/** The payment-relevant fields of an invoice, read LIVE (never cached) so the
+ * open balance is current at apply time — this freshness is the idempotency guard. */
+export interface InvoiceSummary {
+  Id: string;
+  DocNumber?: string;
+  CustomerRef: { value: string; name?: string };
+  /** Remaining open balance in dollars. 0 means fully paid. */
+  Balance: number;
+  TotalAmt: number;
+}
+
+function toInvoiceSummary(inv: Record<string, unknown>): InvoiceSummary {
+  const customerRef = (inv.CustomerRef || {}) as { value?: string; name?: string };
+  if (!customerRef.value) {
+    throw new Error(`Invoice ${String(inv.Id)} has no CustomerRef — cannot apply a customer payment to it.`);
+  }
+  return {
+    Id: String(inv.Id),
+    DocNumber: inv.DocNumber ? String(inv.DocNumber) : undefined,
+    CustomerRef: { value: String(customerRef.value), name: customerRef.name },
+    Balance: Number(inv.Balance ?? 0),
+    TotalAmt: Number(inv.TotalAmt ?? 0),
+  };
+}
+
+/**
+ * Look up a single invoice by its human-facing reference number (DocNumber, e.g. "4315").
+ * Uses the raw-string criteria path (the array path hardcodes maxresults 1000 and returns 0
+ * rows for filtered lookups on this realm — see resolveCustomer). Throws on zero or multiple
+ * matches so a payment is never applied to an ambiguous target.
+ */
+export async function resolveInvoiceByDocNumber(client: QuickBooks, docNumber: string): Promise<InvoiceSummary> {
+  const result = await promisify<unknown>((cb) =>
+    client.findInvoices(`where DocNumber = '${escapeQbValue(docNumber)}' maxresults 5`, cb)
+  );
+  const invoices = extractQueryResults<Record<string, unknown>>(result, 'Invoice');
+  if (invoices.length === 0) {
+    throw new Error(`Invoice not found with reference number "${docNumber}".`);
+  }
+  if (invoices.length > 1) {
+    throw new Error(
+      `Multiple invoices (${invoices.length}) share reference number "${docNumber}" — apply by invoice_id instead.`
+    );
+  }
+  return toInvoiceSummary(invoices[0]);
+}
+
+/** Fetch a single invoice's payment-relevant fields by its QuickBooks Id (live read). */
+export async function getInvoiceSummaryById(client: QuickBooks, id: string): Promise<InvoiceSummary> {
+  const inv = (await promisify<unknown>((cb) => client.getInvoice(id, cb))) as Record<string, unknown>;
+  if (!inv || !inv.Id) {
+    throw new Error(`Invoice not found with id "${id}".`);
+  }
+  return toInvoiceSummary(inv);
+}

@@ -6,6 +6,11 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { toolDefinitions, executeTool } from "./tools/index.js";
+import { assertWriteToolsGated } from "./tools/definitions.js";
+
+// Fail loudly at startup if any mutating tool is named so it escapes the read-only
+// write-gate below. A misnamed write tool would otherwise be silently exposed.
+assertWriteToolsGated();
 
 const isReadOnly = process.env.QBO_READ_ONLY === "true";
 const writeWhitelist = process.env.QBO_WRITE_WHITELIST

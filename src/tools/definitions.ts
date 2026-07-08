@@ -1761,4 +1761,110 @@ export const toolDefinitions = [
       required: ["id"],
     },
   },
+  {
+    name: "create_payment",
+    description:
+      "Record a received customer payment and apply it against one or more open invoices, marking them paid. " +
+      "This records a payment that ALREADY arrived (e.g. a Repay ACH); it never moves real money. " +
+      "Guarded: previews by default (draft=true), hard-fails if any invoice belongs to a different customer, " +
+      "re-checks each invoice's LIVE open balance (refuses already-paid invoices, so a re-run cannot double-apply), " +
+      "and refuses to overpay an invoice. Omit deposit_to_account to route to Undeposited Funds. " +
+      "Returns a link to view the payment in QuickBooks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        customer_name: {
+          type: "string",
+          description: "Customer display name (e.g., 'Arthritis Foundation'). Auto-resolved to ID. Provide this OR customer_id.",
+        },
+        customer_id: {
+          type: "string",
+          description: "Customer ID (use if you already know it, otherwise use customer_name).",
+        },
+        invoices: {
+          type: "array",
+          description: "The open invoice(s) to apply this payment to. Every invoice must belong to the same customer.",
+          items: {
+            type: "object",
+            properties: {
+              doc_number: {
+                type: "string",
+                description: "Invoice reference number (e.g., '4315'). Provide this OR invoice_id.",
+              },
+              invoice_id: {
+                type: "string",
+                description: "Invoice ID (use if you already know it, otherwise use doc_number).",
+              },
+              amount: {
+                type: "number",
+                description: "Amount to apply to THIS invoice. Omit to apply the full current open balance.",
+              },
+            },
+          },
+        },
+        txn_date: {
+          type: "string",
+          description: "Payment date in YYYY-MM-DD format.",
+        },
+        deposit_to_account: {
+          type: "string",
+          description: "Bank or Undeposited Funds account name/number to deposit into. Omit to route to Undeposited Funds (correct for Repay ACH batches).",
+        },
+        payment_ref: {
+          type: "string",
+          description: "Reference number for the payment (e.g., the Repay ACH reference).",
+        },
+        memo: {
+          type: "string",
+          description: "Private memo on the payment (internal, not customer-facing).",
+        },
+        draft: {
+          type: "boolean",
+          description: "If true (default), preview the application without writing. Set false to record the payment.",
+        },
+      },
+      required: ["invoices", "txn_date"],
+    },
+  },
 ];
+
+// Canonical registry of tools that MUTATE QuickBooks. The read-only write-gate
+// (serverFactory.ts) classifies writes by the name regex /^(create_|edit_|delete_)/,
+// so a mutating tool named WITHOUT that prefix would silently bypass the gate and be
+// exposed even in read-only mode. Add every new write tool here; assertWriteToolsGated()
+// then fails LOUDLY at server startup if one is misnamed or missing from the definitions.
+export const WRITE_TOOLS = [
+  "create_journal_entry", "edit_journal_entry",
+  "create_bill", "edit_bill",
+  "create_expense", "edit_expense",
+  "create_sales_receipt", "edit_sales_receipt",
+  "create_invoice", "edit_invoice", "create_recurring_invoice",
+  "create_deposit", "edit_deposit",
+  "create_vendor_credit", "edit_vendor_credit",
+  "create_customer", "edit_customer",
+  "create_payment",
+  "delete_entity",
+] as const;
+
+const WRITE_NAME_RE = /^(create_|edit_|delete_)/;
+
+/**
+ * Startup invariant: every mutating tool must be named create_/edit_/delete_ so the
+ * read-only gate catches it, and must actually exist in toolDefinitions. Throws (fails
+ * the server boot) if either is violated — the guard the plan requires so a future
+ * misnamed write tool can never silently bypass QBO_READ_ONLY.
+ */
+export function assertWriteToolsGated(): void {
+  const escaped = WRITE_TOOLS.filter((n) => !WRITE_NAME_RE.test(n));
+  if (escaped.length > 0) {
+    throw new Error(
+      "Write tools must be named create_/edit_/delete_ so the read-only gate catches them. " +
+        `These would silently bypass it: ${escaped.join(", ")}`
+    );
+  }
+  const defined = new Set(toolDefinitions.map((t) => t.name));
+  const missing = WRITE_TOOLS.filter((n) => !defined.has(n));
+  if (missing.length > 0) {
+    throw new Error(`WRITE_TOOLS lists tools not present in toolDefinitions: ${missing.join(", ")}`);
+  }
+}

@@ -17,4 +17,7 @@ export {
   resolveItem,
   resolveCustomer,
   resolveDepartmentId,
+  resolveInvoiceByDocNumber,
+  getInvoiceSummaryById,
 } from './cache.js';
+export type { InvoiceSummary } from './cache.js';
