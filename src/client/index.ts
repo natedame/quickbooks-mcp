@@ -18,6 +18,8 @@ export {
   resolveCustomer,
   resolveDepartmentId,
   resolveInvoiceByDocNumber,
+  findInvoicesByDocNumber,
+  findSalesReceiptsByDocNumber,
   getInvoiceSummaryById,
 } from './cache.js';
 export type { InvoiceSummary } from './cache.js';

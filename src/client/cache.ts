@@ -326,16 +326,27 @@ function toInvoiceSummary(inv: Record<string, unknown>): InvoiceSummary {
 }
 
 /**
- * Look up a single invoice by its human-facing reference number (DocNumber, e.g. "4315").
- * Uses the raw-string criteria path (the array path hardcodes maxresults 1000 and returns 0
- * rows for filtered lookups on this realm — see resolveCustomer). Throws on zero or multiple
- * matches so a payment is never applied to an ambiguous target.
+ * All invoices sharing a human-facing reference number (DocNumber, e.g. "4315") — the ONE
+ * invoice-by-DocNumber query in the codebase. Returns [] when none exist; does NOT throw on
+ * zero or many, so callers decide what each count means (a payment lookup wants exactly one;
+ * a create-time duplicate guard wants zero). Uses the raw-string criteria path (the array path
+ * hardcodes maxresults 1000 and returns 0 rows for filtered lookups on this realm — see
+ * resolveCustomer).
  */
-export async function resolveInvoiceByDocNumber(client: QuickBooks, docNumber: string): Promise<InvoiceSummary> {
+export async function findInvoicesByDocNumber(client: QuickBooks, docNumber: string): Promise<InvoiceSummary[]> {
   const result = await promisify<unknown>((cb) =>
     client.findInvoices(`where DocNumber = '${escapeQbValue(docNumber)}' maxresults 5`, cb)
   );
-  const invoices = extractQueryResults<Record<string, unknown>>(result, 'Invoice');
+  return extractQueryResults<Record<string, unknown>>(result, 'Invoice').map(toInvoiceSummary);
+}
+
+/**
+ * Look up a single invoice by its human-facing reference number (DocNumber, e.g. "4315").
+ * Throws on zero or multiple matches so a payment is never applied to an ambiguous target.
+ * Delegates the query to findInvoicesByDocNumber so there is exactly one such query path.
+ */
+export async function resolveInvoiceByDocNumber(client: QuickBooks, docNumber: string): Promise<InvoiceSummary> {
+  const invoices = await findInvoicesByDocNumber(client, docNumber);
   if (invoices.length === 0) {
     throw new Error(`Invoice not found with reference number "${docNumber}".`);
   }
@@ -344,7 +355,26 @@ export async function resolveInvoiceByDocNumber(client: QuickBooks, docNumber: s
       `Multiple invoices (${invoices.length}) share reference number "${docNumber}" — apply by invoice_id instead.`
     );
   }
-  return toInvoiceSummary(invoices[0]);
+  return invoices[0];
+}
+
+/**
+ * All sales receipts sharing a DocNumber (empty when none). Sales receipts, like invoices, are
+ * customer-facing documents whose DocNumber is our own sequential number, so a duplicate is a
+ * real defect — used by the create_sales_receipt duplicate-number guard. Returns a light shape
+ * (Id + DocNumber) since only existence + identity matter for the guard.
+ */
+export async function findSalesReceiptsByDocNumber(
+  client: QuickBooks,
+  docNumber: string
+): Promise<Array<{ Id: string; DocNumber?: string }>> {
+  const result = await promisify<unknown>((cb) =>
+    client.findSalesReceipts(`where DocNumber = '${escapeQbValue(docNumber)}' maxresults 5`, cb)
+  );
+  return extractQueryResults<Record<string, unknown>>(result, 'SalesReceipt').map((r) => ({
+    Id: String(r.Id),
+    DocNumber: r.DocNumber ? String(r.DocNumber) : undefined,
+  }));
 }
 
 /** Fetch a single invoice's payment-relevant fields by its QuickBooks Id (live read). */

@@ -814,7 +814,7 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number for the sales receipt (optional)",
+          description: "Sales receipt reference number ('Ref no.'). OMIT to let QuickBooks auto-assign the next sequential number (recommended). If provided, it is checked against existing sales receipts and rejected when it would duplicate an existing number.",
         },
         lines: {
           type: "array",
@@ -914,7 +914,7 @@ export const toolDefinitions = [
         },
         doc_number: {
           type: "string",
-          description: "Reference number for the invoice (optional)",
+          description: "Invoice reference number ('Ref no.'). OMIT to let QuickBooks auto-assign the next sequential number (recommended). If provided, it is checked against existing invoices and rejected when it would duplicate an existing invoice number.",
         },
         lines: {
           type: "array",

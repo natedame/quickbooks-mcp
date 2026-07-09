@@ -7,6 +7,7 @@ import {
   getDepartmentCache,
   resolveItem,
   resolveCustomer,
+  findSalesReceiptsByDocNumber,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport } from "../../utils/index.js";
 
@@ -159,9 +160,31 @@ export async function handleCreateSalesReceipt(
     })),
   };
 
+  // Duplicate reference-number guard. Like invoices, a sales receipt's DocNumber is our own
+  // customer-facing sequential number, so a duplicate is a real defect. QuickBooks does not
+  // enforce uniqueness via the API; an explicit doc_number that already exists would silently
+  // create a second sales receipt with the same number. Omitting doc_number lets QuickBooks
+  // auto-assign the next number (the source of truth), so there is nothing to check.
+  let duplicateWarning: string | undefined;
+  if (doc_number) {
+    const existing = await findSalesReceiptsByDocNumber(client, doc_number);
+    if (existing.length > 0) {
+      const who = existing.map((e) => `#${e.DocNumber ?? doc_number} (id ${e.Id})`).join(", ");
+      const msg =
+        `Sales receipt number "${doc_number}" is already in use by ${who}. ` +
+        `Refusing to create a duplicate. Omit doc_number to let QuickBooks auto-assign the ` +
+        `next sequential number, or choose a different number.`;
+      if (!draft) {
+        throw new Error(msg);
+      }
+      duplicateWarning = `⚠️ DUPLICATE NUMBER: ${msg}`;
+    }
+  }
+
   if (draft) {
     const preview = [
       "DRAFT - Sales Receipt Preview",
+      ...(duplicateWarning ? [duplicateWarning] : []),
       "",
       `Customer: ${customerRef?.name || "(none)"}`,
       `Date: ${txn_date}`,

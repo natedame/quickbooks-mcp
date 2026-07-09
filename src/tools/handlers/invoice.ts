@@ -7,6 +7,7 @@ import {
   getDepartmentCache,
   resolveItem,
   resolveCustomer,
+  findInvoicesByDocNumber,
 } from "../../client/index.js";
 import { validateAmount, toDollars, formatDollars, sumCents, outputReport } from "../../utils/index.js";
 
@@ -179,9 +180,35 @@ export async function handleCreateInvoice(
     })),
   };
 
+  // Duplicate invoice-number guard. QuickBooks does NOT enforce DocNumber uniqueness via the
+  // API, so an explicit doc_number that already exists would silently create a SECOND invoice
+  // with the same number (this is how invoice #4319 landed on two invoices). When doc_number is
+  // omitted there is nothing to check — QuickBooks auto-assigns the next sequential number,
+  // which is the source of truth. NOTE: this guards the create_invoice tool path only; it
+  // cannot intercept duplicates produced by QuickBooks' own recurring-invoice engine.
+  let duplicateWarning: string | undefined;
+  if (doc_number) {
+    const existing = await findInvoicesByDocNumber(client, doc_number);
+    if (existing.length > 0) {
+      const who = existing
+        .map((e) => `#${e.DocNumber ?? doc_number} (id ${e.Id}${e.CustomerRef?.name ? `, ${e.CustomerRef.name}` : ""})`)
+        .join(", ");
+      const msg =
+        `Invoice number "${doc_number}" is already in use by ${who}. ` +
+        `Refusing to create a duplicate invoice number. Omit doc_number to let QuickBooks ` +
+        `auto-assign the next sequential number, or choose a different number. ` +
+        `(If re-issuing after a void, confirm the old invoice is truly retired first.)`;
+      if (!draft) {
+        throw new Error(msg);
+      }
+      duplicateWarning = `⚠️ DUPLICATE NUMBER: ${msg}`;
+    }
+  }
+
   if (draft) {
     const preview = [
       "DRAFT - Invoice Preview",
+      ...(duplicateWarning ? [duplicateWarning] : []),
       "",
       `Customer: ${customerRef.name}`,
       `Date: ${txn_date}`,
