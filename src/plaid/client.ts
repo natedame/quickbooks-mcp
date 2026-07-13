@@ -7,6 +7,7 @@
 
 import { CountryCode, Products, type PlaidApi } from "plaid";
 import { getPlaidClient, type PlaidEnv } from "./config.js";
+import { selectCapturedSession, type CapturedSession, type LinkSession } from "./connect-flow.js";
 
 export interface HostedLink {
   link_token: string;
@@ -79,15 +80,26 @@ export class PlaidClient {
    * Create a Hosted Link — the URL Nate clicks once to connect the bank and
    * grant read access. Presence of `hosted_link` makes Plaid host the flow, so
    * there is no client-side Link SDK to build.
+   *
+   * `urlLifetimeSeconds` sets how long the generated URL stays clickable. Without
+   * it Plaid defaults a hosted link to only 30 minutes, which is too short for a
+   * human to get to it — so the connect runner passes a generous value (max 21
+   * days per Plaid). NOTE this is a different clock from the ~6h retention of the
+   * session RESULT after the user finishes; the runner handles that separately.
    */
-  async createHostedLink(clientUserId: string): Promise<HostedLink> {
+  async createHostedLink(
+    clientUserId: string,
+    opts: { urlLifetimeSeconds?: number } = {}
+  ): Promise<HostedLink> {
     const resp = await this.api.linkTokenCreate({
       user: { client_user_id: clientUserId },
       client_name: "Profound Strategy Bookkeeping",
       products: [Products.Transactions],
       country_codes: [CountryCode.Us],
       language: "en",
-      hosted_link: {},
+      hosted_link: opts.urlLifetimeSeconds
+        ? { url_lifetime_seconds: opts.urlLifetimeSeconds }
+        : {},
     });
     const data = resp.data as { link_token: string; expiration: string; hosted_link_url?: string };
     if (!data.hosted_link_url) {
@@ -98,6 +110,20 @@ export class PlaidClient {
       hosted_link_url: data.hosted_link_url,
       expiration: data.expiration,
     };
+  }
+
+  /**
+   * Poll a Hosted Link session's outcome via `/link/token/get`. This is how
+   * Hosted Link returns the `public_token` (there is no frontend callback):
+   * once the user finishes, `link_sessions[]` carries the result for up to ~6h.
+   * Returns the captured public_token (+ institution) when a finished session
+   * succeeded, an `exited` flag if the user abandoned, or `finished:false` while
+   * still in progress. Read-only.
+   */
+  async getLinkSessionResult(linkToken: string): Promise<CapturedSession> {
+    const resp = await this.api.linkTokenGet({ link_token: linkToken });
+    const sessions = (resp.data.link_sessions || []) as LinkSession[];
+    return selectCapturedSession(sessions);
   }
 
   /** Exchange a public_token (from Hosted Link or sandbox) for a durable access_token. */
