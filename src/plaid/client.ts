@@ -113,6 +113,27 @@ export class PlaidClient {
   }
 
   /**
+   * Create a PLAIN link_token for EMBEDDED Plaid Link (Plaid Link JS via
+   * link-initialize.js) — i.e. WITHOUT the `hosted_link` field. Embedded Link
+   * runs in the user's own browser and fires `onExit(err, metadata)` client-side
+   * with the exact `error_code` / `display_message` / `metadata.status` that
+   * Hosted Link's `/link/token/get` hides (it only reports whether a session
+   * finished, never why it died mid-flow). Same read-only Transactions scope as
+   * the hosted flow; no `redirect_uri` is set because that field only matters
+   * for OAuth institutions.
+   */
+  async createLinkToken(clientUserId: string): Promise<{ link_token: string; expiration: string }> {
+    const resp = await this.api.linkTokenCreate({
+      user: { client_user_id: clientUserId },
+      client_name: "Profound Strategy Bookkeeping",
+      products: [Products.Transactions],
+      country_codes: [CountryCode.Us],
+      language: "en",
+    });
+    return { link_token: resp.data.link_token, expiration: resp.data.expiration };
+  }
+
+  /**
    * Poll a Hosted Link session's outcome via `/link/token/get`. This is how
    * Hosted Link returns the `public_token` (there is no frontend callback):
    * once the user finishes, `link_sessions[]` carries the result for up to ~6h.
