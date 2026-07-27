@@ -1,7 +1,7 @@
 // Handlers for report tools (profit_loss, balance_sheet, trial_balance)
 
 import QuickBooks from "node-quickbooks";
-import { promisify, resolveDepartmentId } from "../../client/index.js";
+import { promisifyRead, resolveDepartmentId } from "../../client/index.js";
 import { outputReport } from "../../utils/index.js";
 import { extractReportSummary } from "../../reports/index.js";
 import { QBReport } from "../../types/index.js";
@@ -25,7 +25,7 @@ export async function handleGetProfitLoss(
   if (department) options.department = await resolveDepartmentId(client, department);
   if (accounting_method) options.accounting_method = accounting_method;
 
-  const result = await promisify<unknown>((cb) =>
+  const result = await promisifyRead<unknown>((cb) =>
     client.reportProfitAndLoss(options, cb)
   ) as QBReport;
 
@@ -55,7 +55,7 @@ export async function handleGetBalanceSheet(
   if (department) options.department = await resolveDepartmentId(client, department);
   if (accounting_method) options.accounting_method = accounting_method;
 
-  const result = await promisify<unknown>((cb) =>
+  const result = await promisifyRead<unknown>((cb) =>
     client.reportBalanceSheet(options, cb)
   ) as QBReport;
 
@@ -78,7 +78,7 @@ export async function handleGetTrialBalance(
   if (end_date) options.end_date = end_date;
   if (accounting_method) options.accounting_method = accounting_method;
 
-  const result = await promisify<unknown>((cb) =>
+  const result = await promisifyRead<unknown>((cb) =>
     client.reportTrialBalance(options, cb)
   ) as QBReport;
 
@@ -101,7 +101,7 @@ export async function handleGetCashFlow(
   if (end_date) options.end_date = end_date;
   if (summarize_by) options.summarize_column_by = summarize_by;
 
-  const result = await promisify<unknown>((cb) =>
+  const result = await promisifyRead<unknown>((cb) =>
     client.reportCashFlow(options, cb)
   ) as QBReport;
 

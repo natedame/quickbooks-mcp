@@ -3,9 +3,8 @@
 // total debits/credits, and transaction count for any account over a date range.
 
 import QuickBooks from "node-quickbooks";
-import { resolveAccount, resolveDepartmentId, promisify } from "../../client/index.js";
+import { resolveAccount, resolveDepartmentId, promisifyRead } from "../../client/index.js";
 import { outputReport } from "../../utils/index.js";
-import { withThrottleRetry } from "../../query/index.js";
 import { QBReport } from "../../types/index.js";
 
 interface GLRowColData {
@@ -168,8 +167,8 @@ export async function handleAccountPeriodSummary(
 
   // Call the GeneralLedger report. Retried through a throttle response so a busy
   // realm surfaces the report rather than a raw 429.
-  const report = (await withThrottleRetry(() =>
-    promisify<unknown>((cb) => client.reportGeneralLedgerDetail(options, cb))
+  const report = (await promisifyRead<unknown>((cb) =>
+    client.reportGeneralLedgerDetail(options, cb)
   )) as GLReport;
 
   // Parse the report

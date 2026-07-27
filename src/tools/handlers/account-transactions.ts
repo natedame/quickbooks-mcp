@@ -113,8 +113,9 @@ export async function handleQueryAccountTransactions(
   // single source of truth, defined alongside the extractor that handles each type.
   //
   // Concurrency is capped because QuickBooks rejects bursts of parallel requests
-  // per realm with 429s; firing all twelve at once reliably trips it.
-  const ENTITY_QUERY_CONCURRENCY = 4;
+  // per realm with 429s; firing all twelve at once reliably trips it. Eight leaves
+  // headroom under the ~10-per-realm ceiling for any concurrent call.
+  const ENTITY_QUERY_CONCURRENCY = 8;
 
   const queryResults = await mapWithConcurrency(
     POSTING_ENTITY_TYPES,
@@ -160,6 +161,17 @@ export async function handleQueryAccountTransactions(
     warnings.push(
       'Transfer and BillPayment transactions are not department-trackable in QuickBooks ' +
       'and are therefore excluded while a department filter is applied.'
+    );
+  }
+
+  // QuickBooks' "Credit Card Payment" transaction has no queryable entity in this
+  // API, so credit-card accounts that use one will not tie out to the ledger. Say
+  // so up front rather than leaving the reader to discover the difference.
+  if (resolvedAccount.AccountType === 'Credit Card') {
+    warnings.push(
+      'QuickBooks Credit Card Payment transactions cannot be queried through this API, ' +
+      'so any of those in this period are missing from these totals. ' +
+      'Use account_period_summary for a figure that includes them.'
     );
   }
 

@@ -165,7 +165,7 @@ export const toolDefinitions = [
   },
   {
     name: "query_account_transactions",
-    description: "Query all transactions affecting a specific account. Searches across JournalEntry, Purchase, Deposit, SalesReceipt, Bill, Invoice, and Payment. Returns consolidated list with date, type, amount (debit/credit), and description. Useful for investigating account balance discrepancies.",
+    description: "Query all transactions affecting a specific account. Searches every entity type that posts to the general ledger: JournalEntry, Purchase, Deposit, SalesReceipt, Bill, BillPayment, VendorCredit, Invoice, Payment, CreditMemo, RefundReceipt, and Transfer. Returns consolidated list with date, type, amount (debit/credit), and description. Totals reconcile to the GeneralLedger report, except that QuickBooks' CreditCardPayment entity cannot be queried through this API and is not included. If any part of the result is incomplete, a 'warnings' list says so. Useful for investigating account balance discrepancies.",
     inputSchema: {
       type: "object",
       properties: {

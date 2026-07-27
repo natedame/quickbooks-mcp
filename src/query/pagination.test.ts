@@ -4,7 +4,7 @@
 // of the twelve queries. These lock the two guards: a capped fan-out, and a retry
 // at the single point every query passes through.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { mapWithConcurrency, paginatedQuery } from "./pagination.js";
 import { PaginationParams } from "../types/index.js";
 
@@ -40,15 +40,21 @@ describe("throttle retry", () => {
     expect(res.entities).toHaveLength(1);
   });
 
-  // Deliberately slow: it walks the whole real backoff ladder (~6-12s with jitter)
-  // rather than shortening it, so the bound being asserted is the shipped one.
   it("gives up rather than retrying forever", async () => {
-    const seen = { calls: 0 };
-    await expect(
-      paginatedQuery(makeClient(Array.from({ length: 20 }, throttled), seen), "findBills", params)
-    ).rejects.toThrow(/429/);
-    expect(seen.calls).toBe(5);
-  }, 20000);
+    // Virtual time, so the real backoff ladder (~6-12s) is exercised without
+    // waiting it out.
+    vi.useFakeTimers();
+    try {
+      const seen = { calls: 0 };
+      const pending = paginatedQuery(makeClient(Array.from({ length: 20 }, throttled), seen), "findBills", params);
+      const settled = expect(pending).rejects.toThrow(/429/);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await settled;
+      expect(seen.calls).toBe(5);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("does not retry an error that is not a throttle", async () => {
     const seen = { calls: 0 };

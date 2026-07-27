@@ -11,6 +11,7 @@
 import { describe, it, expect } from "vitest";
 import { extractAccountLines, resolveDefaultAccountId, POSTING_ENTITY_TYPES } from "./account-transactions.js";
 import { AccountCache, CachedAccount, TransactionLine } from "../types/index.js";
+import { toCents, toDollars } from "../utils/index.js";
 
 const AP = "13";        // 20000 Accounts Payable
 const AR = "11";        // 11000 Accounts Receivable
@@ -43,10 +44,11 @@ function makeCache(extra: CachedAccount[] = []): AccountCache {
 // Summary maths mirrors handleQueryAccountTransactions: only matching lines count.
 function totals(lines: TransactionLine[]) {
   const matching = lines.filter(l => l.isMatchingLine);
-  const round = (n: number) => Math.round(n * 100) / 100;
+  const sum = (ls: TransactionLine[], pick: (l: TransactionLine) => number) =>
+    toDollars(ls.reduce((cents, l) => cents + toCents(pick(l)), 0));
   return {
-    debits: round(matching.filter(l => l.amount > 0).reduce((s, l) => s + l.amount, 0)),
-    credits: round(matching.filter(l => l.amount < 0).reduce((s, l) => s + Math.abs(l.amount), 0)),
+    debits: sum(matching.filter(l => l.amount > 0), l => l.amount),
+    credits: sum(matching.filter(l => l.amount < 0), l => Math.abs(l.amount)),
     count: matching.length,
   };
 }
@@ -230,7 +232,7 @@ describe("VendorCredit", () => {
     const lines = extractAccountLines([vc], "VendorCredit", EXPENSE, makeCache());
     const matched = lines.filter(l => l.isMatchingLine);
     expect(matched.map(l => l.amount)).toEqual([-10724.23, 9510.03]);
-    expect(Math.round(matched.reduce((s, l) => s + l.amount, 0) * 100) / 100).toBe(-1214.2);
+    expect(toDollars(matched.reduce((cents, l) => cents + toCents(l.amount), 0))).toBe(-1214.2);
   });
 });
 

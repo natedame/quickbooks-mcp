@@ -87,20 +87,12 @@ export function extractAccountLines(
 ): TransactionLine[] {
   const lines: TransactionLine[] = [];
 
-  // Resolved lazily and only once per call — see resolveDefaultAccountId.
-  let defaultsResolved = false;
-  let defaultApAccountId: string | undefined;
-  let defaultArAccountId: string | undefined;
-  let defaultUndepositedAccountId: string | undefined;
-  const warnedFor = new Set<string>();
-
-  const ensureDefaults = (): void => {
-    if (defaultsResolved) return;
-    defaultsResolved = true;
-    defaultApAccountId = resolveDefaultAccountId(accountCache, 'AccountsPayable', 'Accounts Payable');
-    defaultArAccountId = resolveDefaultAccountId(accountCache, 'AccountsReceivable', 'Accounts Receivable');
-    defaultUndepositedAccountId = resolveDefaultAccountId(accountCache, 'UndepositedFunds', 'Other Current Asset');
+  const defaults: Record<'AccountsPayable' | 'AccountsReceivable' | 'UndepositedFunds', string | undefined> = {
+    AccountsPayable: resolveDefaultAccountId(accountCache, 'AccountsPayable', 'Accounts Payable'),
+    AccountsReceivable: resolveDefaultAccountId(accountCache, 'AccountsReceivable', 'Accounts Receivable'),
+    UndepositedFunds: resolveDefaultAccountId(accountCache, 'UndepositedFunds', 'Other Current Asset'),
   };
+  const warnedFor = new Set<string>();
 
   // Returns the account the entity posts its header side to, falling back to the
   // company default when the ref is absent. Records a warning (never silently
@@ -110,11 +102,7 @@ export function extractAccountLines(
     kind: 'AccountsPayable' | 'AccountsReceivable' | 'UndepositedFunds'
   ): string | undefined => {
     if (ref?.value) return ref.value;
-    ensureDefaults();
-    const resolved =
-      kind === 'AccountsPayable' ? defaultApAccountId
-        : kind === 'AccountsReceivable' ? defaultArAccountId
-          : defaultUndepositedAccountId;
+    const resolved = defaults[kind];
     if (!resolved && warnings && !warnedFor.has(kind)) {
       warnedFor.add(kind);
       warnings.push(

@@ -1,7 +1,7 @@
 // Account and department caching for QuickBooks lookups
 
 import QuickBooks from "node-quickbooks";
-import { promisify } from "./promisify.js";
+import { promisify, promisifyRead } from "./promisify.js";
 import {
   CachedAccount,
   CachedCustomer,
@@ -50,7 +50,7 @@ export async function getDepartmentCache(client: QuickBooks): Promise<Department
     return departmentCache;
   }
 
-  const result = await promisify<unknown>((cb) => client.findDepartments({ fetchAll: true }, cb));
+  const result = await promisifyRead<unknown>((cb) => client.findDepartments({ fetchAll: true }, cb));
   const items = extractQueryResults<CachedDepartment>(result, 'Department');
 
   const byId = new Map<string, CachedDepartment>();
@@ -69,7 +69,7 @@ export async function getAccountCache(client: QuickBooks): Promise<AccountCache>
     return accountCache;
   }
 
-  const result = await promisify<unknown>((cb) => client.findAccounts({ fetchAll: true }, cb));
+  const result = await promisifyRead<unknown>((cb) => client.findAccounts({ fetchAll: true }, cb));
   const items = extractQueryResults<CachedAccount>(result, 'Account');
 
   const byId = new Map<string, CachedAccount>();
@@ -117,7 +117,7 @@ export async function getVendorCache(client: QuickBooks): Promise<VendorCache> {
     return vendorCache;
   }
 
-  const result = await promisify<unknown>((cb) => client.findVendors({ fetchAll: true }, cb));
+  const result = await promisifyRead<unknown>((cb) => client.findVendors({ fetchAll: true }, cb));
   const items = extractQueryResults<CachedVendor>(result, 'Vendor');
 
   const byId = new Map<string, CachedVendor>();

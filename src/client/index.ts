@@ -1,6 +1,6 @@
 // Barrel export for client module
 
-export { promisify } from './promisify.js';
+export { promisify, promisifyRead, withThrottleRetry } from './promisify.js';
 export {
   getClient,
   clearCredentialsCache,
