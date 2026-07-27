@@ -12,6 +12,10 @@ export interface CachedAccount {
   FullyQualifiedName?: string;
   AcctNum?: string;
   AccountType?: string;
+  // Needed to resolve the company's default AP / AR / Undeposited Funds account
+  // when a transaction omits its account ref (QuickBooks elides the ref when it
+  // equals the company default).
+  AccountSubType?: string;
   CurrentBalance?: number;
   Active?: boolean;
 }

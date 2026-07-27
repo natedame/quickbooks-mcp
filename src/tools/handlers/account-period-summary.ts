@@ -5,6 +5,7 @@
 import QuickBooks from "node-quickbooks";
 import { resolveAccount, resolveDepartmentId, promisify } from "../../client/index.js";
 import { outputReport } from "../../utils/index.js";
+import { withThrottleRetry } from "../../query/index.js";
 import { QBReport } from "../../types/index.js";
 
 interface GLRowColData {
@@ -51,16 +52,24 @@ interface PeriodSummary {
  * - "Balance" column: running balance (present on transaction rows, not on Summary)
  * - "Beginning Balance" row: Balance column has opening balance
  * - Summary row: Amount column has net activity total; Balance column is empty
- * - Closing balance: Balance column of the last transaction row
+ * - Closing balance: DERIVED as opening balance plus net activity.
+ *
+ * Closing balance is deliberately NOT read from the Balance column of the last
+ * row. Summing amounts is commutative, so the derived figure is immune to row
+ * ordering, and Intuit's modernized GeneralLedger response reorders rows within a
+ * same-date group. Reading the last row was also outright wrong for a parent
+ * account with sub-accounts: the report ends with the last CHILD section's running
+ * balance, not the account's. Verified against the Balance Sheet — for
+ * "21000 Chase Credit" at 2025-12-31 the last row reads 0.00 while the true
+ * balance is 10,061.67, which is what opening + net activity yields.
  */
-function parseGLReport(report: GLReport): PeriodSummary {
+export function parseGLReport(report: GLReport): PeriodSummary {
   const columns = report.Columns?.Column ?? [];
 
   const amountIdx = columns.findIndex(c => c.ColTitle === "Amount");
   const balanceIdx = columns.findIndex(c => c.ColTitle === "Balance");
 
   let openingBalance = 0;
-  let closingBalance = 0;
   let totalDebits = 0;
   let totalCredits = 0;
   let transactionCount = 0;
@@ -99,23 +108,18 @@ function parseGLReport(report: GLReport): PeriodSummary {
             totalCredits += amount;
           }
         }
-
-        // Track running balance — last row's balance = closing balance
-        if (balanceIdx >= 0 && colData[balanceIdx]?.value) {
-          closingBalance = parseFloat(colData[balanceIdx].value!) || 0;
-        }
       }
     }
   }
 
   processRows(rows);
 
-  // If no transactions, closing = opening
-  if (transactionCount === 0) {
-    closingBalance = openingBalance;
-  }
-
   const netActivity = totalCredits - totalDebits;
+
+  // Order-independent by construction: addition is commutative, so no row
+  // ordering can change this. With no transactions it collapses to the opening
+  // balance, which is the correct answer for an empty period.
+  const closingBalance = openingBalance + netActivity;
 
   return {
     openingBalance,
@@ -162,9 +166,10 @@ export async function handleAccountPeriodSummary(
     options.accounting_method = accounting_method;
   }
 
-  // Call the GeneralLedger report
-  const report = (await promisify<unknown>((cb) =>
-    client.reportGeneralLedgerDetail(options, cb)
+  // Call the GeneralLedger report. Retried through a throttle response so a busy
+  // realm surfaces the report rather than a raw 429.
+  const report = (await withThrottleRetry(() =>
+    promisify<unknown>((cb) => client.reportGeneralLedgerDetail(options, cb))
   )) as GLReport;
 
   // Parse the report

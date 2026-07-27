@@ -8,7 +8,7 @@ import {
 } from "../../client/index.js";
 import { toCents, sumCents, toDollars, outputReport, isHttpMode } from "../../utils/index.js";
 import { PaginationParams } from "../../types/index.js";
-import { paginatedQuery, extractAccountLines } from "../../query/index.js";
+import { paginatedQuery, extractAccountLines, mapWithConcurrency, POSTING_ENTITY_TYPES } from "../../query/index.js";
 import { TransactionLine } from "../../types/index.js";
 
 // Group transactions by unique transaction key (type:txnId)
@@ -105,33 +105,39 @@ export async function handleQueryAccountTransactions(
   // Build date filter for QB query
   const dateFilter = `TxnDate >= '${startDateResolved}' AND TxnDate <= '${endDateResolved}'`;
 
-  // Entity types to query
-  const entityTypes = [
-    { type: 'JournalEntry', finder: 'findJournalEntries' as keyof QuickBooks },
-    { type: 'Purchase', finder: 'findPurchases' as keyof QuickBooks },
-    { type: 'Deposit', finder: 'findDeposits' as keyof QuickBooks },
-    { type: 'SalesReceipt', finder: 'findSalesReceipts' as keyof QuickBooks },
-    { type: 'Bill', finder: 'findBills' as keyof QuickBooks },
-    { type: 'Invoice', finder: 'findInvoices' as keyof QuickBooks },
-    { type: 'Payment', finder: 'findPayments' as keyof QuickBooks },
-  ];
+  // Anything that made this result less than complete. Surfaced to the caller
+  // rather than swallowed — a silently partial transaction list reads as fact.
+  const warnings: string[] = [];
 
-  // Query all entity types in parallel
-  const queryResults = await Promise.all(
-    entityTypes.map(async ({ type, finder }) => {
+  // Query every general-ledger-posting entity type. POSTING_ENTITY_TYPES is the
+  // single source of truth, defined alongside the extractor that handles each type.
+  //
+  // Concurrency is capped because QuickBooks rejects bursts of parallel requests
+  // per realm with 429s; firing all twelve at once reliably trips it.
+  const ENTITY_QUERY_CONCURRENCY = 4;
+
+  const queryResults = await mapWithConcurrency(
+    POSTING_ENTITY_TYPES,
+    ENTITY_QUERY_CONCURRENCY,
+    async ({ type, finder }) => {
       const pagination: PaginationParams = {
         maxResults: 10000,  // Use full SAFETY_LIMIT for account transaction queries
         startPosition: null, // Auto-paginate
         baseCriteria: `WHERE ${dateFilter}`
       };
       try {
-        const result = await paginatedQuery(client, finder, pagination);
+        const result = await paginatedQuery(client, finder as keyof QuickBooks, pagination);
         return { type, entities: result.entities as Array<Record<string, unknown>> };
-      } catch {
-        // Some entity types might fail (e.g., no permissions), continue with others
+      } catch (err) {
+        // A failed entity type used to be silently treated as "no transactions",
+        // which is indistinguishable from a genuinely empty result. Report it.
+        warnings.push(
+          `${type}: query failed (${err instanceof Error ? err.message : String(err)}), ` +
+          `so ${type} transactions are missing from these totals.`
+        );
         return { type, entities: [] };
       }
-    })
+    }
   );
 
   // Extract lines matching the account from each entity type
@@ -142,9 +148,19 @@ export async function handleQueryAccountTransactions(
       type,
       resolvedAccount.Id,
       accountCache,
-      resolvedDepartmentId
+      resolvedDepartmentId,
+      warnings
     );
     allLines.push(...lines);
+  }
+
+  // Transfers and bill payments carry no department in QuickBooks, so a
+  // department filter necessarily excludes them.
+  if (resolvedDepartmentId) {
+    warnings.push(
+      'Transfer and BillPayment transactions are not department-trackable in QuickBooks ' +
+      'and are therefore excluded while a department filter is applied.'
+    );
   }
 
   // Sort by date (oldest first)
@@ -247,6 +263,7 @@ export async function handleQueryAccountTransactions(
     },
     transactions: outputLines,
     groupedByTransaction: outputGrouped,
+    ...(warnings.length ? { warnings } : {}),
     ...(truncated ? { truncatedAt: HTTP_TXN_LIMIT, totalLines: allLines.length } : {}),
   };
 
@@ -269,6 +286,14 @@ export async function handleQueryAccountTransactions(
 
   if (truncated) {
     summaryLines.push(`(Showing first ${HTTP_TXN_LIMIT} of ${allLines.length} transaction lines in detail)`);
+  }
+
+  if (warnings.length) {
+    summaryLines.push('');
+    summaryLines.push('INCOMPLETE - this result is missing data:');
+    for (const w of warnings) {
+      summaryLines.push(`  ! ${w}`);
+    }
   }
 
   if (groupedTransactions.length > 0) {
