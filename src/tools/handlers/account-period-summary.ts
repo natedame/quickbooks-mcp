@@ -4,7 +4,7 @@
 
 import QuickBooks from "node-quickbooks";
 import { resolveAccount, resolveDepartmentId, promisifyRead } from "../../client/index.js";
-import { outputReport } from "../../utils/index.js";
+import { outputReport, toCents, toDollars } from "../../utils/index.js";
 import { QBReport } from "../../types/index.js";
 
 interface GLRowColData {
@@ -68,9 +68,11 @@ export function parseGLReport(report: GLReport): PeriodSummary {
   const amountIdx = columns.findIndex(c => c.ColTitle === "Amount");
   const balanceIdx = columns.findIndex(c => c.ColTitle === "Balance");
 
-  let openingBalance = 0;
-  let totalDebits = 0;
-  let totalCredits = 0;
+  // Accumulated in integer cents. Summing hundreds of floats drifts — a real
+  // 387-row credit-card period produced a closing balance of 10061.66999999997.
+  let openingCents = 0;
+  let totalDebitCents = 0;
+  let totalCreditCents = 0;
   let transactionCount = 0;
 
   const rows = report.Rows?.Row ?? [];
@@ -89,7 +91,7 @@ export function parseGLReport(report: GLReport): PeriodSummary {
 
         if (firstCol === "Beginning Balance") {
           if (balanceIdx >= 0 && colData[balanceIdx]?.value) {
-            openingBalance += parseFloat(colData[balanceIdx].value!) || 0;
+            openingCents += toCents(parseFloat(colData[balanceIdx].value!) || 0);
           }
           continue;
         }
@@ -102,9 +104,9 @@ export function parseGLReport(report: GLReport): PeriodSummary {
         if (amount !== 0) {
           transactionCount++;
           if (amount < 0) {
-            totalDebits += Math.abs(amount);
+            totalDebitCents += toCents(Math.abs(amount));
           } else {
-            totalCredits += amount;
+            totalCreditCents += toCents(amount);
           }
         }
       }
@@ -113,19 +115,17 @@ export function parseGLReport(report: GLReport): PeriodSummary {
 
   processRows(rows);
 
-  const netActivity = totalCredits - totalDebits;
-
-  // Order-independent by construction: addition is commutative, so no row
-  // ordering can change this. With no transactions it collapses to the opening
-  // balance, which is the correct answer for an empty period.
-  const closingBalance = openingBalance + netActivity;
+  const netActivityCents = totalCreditCents - totalDebitCents;
 
   return {
-    openingBalance,
-    closingBalance,
-    totalDebits,
-    totalCredits,
-    netActivity,
+    openingBalance: toDollars(openingCents),
+    // Order-independent by construction: addition is commutative, so no row
+    // ordering can change this. With no transactions it collapses to the opening
+    // balance, which is the correct answer for an empty period.
+    closingBalance: toDollars(openingCents + netActivityCents),
+    totalDebits: toDollars(totalDebitCents),
+    totalCredits: toDollars(totalCreditCents),
+    netActivity: toDollars(netActivityCents),
     transactionCount,
   };
 }
