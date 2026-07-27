@@ -1,13 +1,20 @@
 // URL generation utilities for QuickBooks Online
 
+// Keep in step with POSTING_ENTITY_TYPES in src/query/account-transactions.ts —
+// a type missing here still appears in results, just with no link to click.
 const TXN_URL_MAP: Record<string, string> = {
   journalentry: "journal",
   purchase: "expense",
   deposit: "deposit",
   salesreceipt: "salesreceipt",
   bill: "bill",
+  billpayment: "billpayment",
+  vendorcredit: "vendorcredit",
   invoice: "invoice",
   payment: "payment",
+  creditmemo: "creditmemo",
+  refundreceipt: "refundreceipt",
+  transfer: "transfer",
 };
 
 // Name entities use nameId= instead of txnId=

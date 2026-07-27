@@ -11,7 +11,7 @@
 import { describe, it, expect } from "vitest";
 import { extractAccountLines, resolveDefaultAccountId, POSTING_ENTITY_TYPES } from "./account-transactions.js";
 import { AccountCache, CachedAccount, TransactionLine } from "../types/index.js";
-import { toCents, toDollars } from "../utils/index.js";
+import { toCents, toDollars, getQboUrl } from "../utils/index.js";
 
 const AP = "13";        // 20000 Accounts Payable
 const AR = "11";        // 11000 Accounts Receivable
@@ -393,5 +393,14 @@ describe("POSTING_ENTITY_TYPES", () => {
     expect(types).toEqual(expect.arrayContaining([
       "BillPayment", "Transfer", "VendorCredit", "CreditMemo", "RefundReceipt",
     ]));
+  });
+
+  it("gives every type a QuickBooks link to click", () => {
+    // A type absent from the URL map still shows up in results, just with an
+    // empty qboLink — easy to miss, so assert the two lists agree.
+    const linkless = POSTING_ENTITY_TYPES
+      .map(e => e.type)
+      .filter(type => !getQboUrl(type, "1"));
+    expect(linkless).toEqual([]);
   });
 });
